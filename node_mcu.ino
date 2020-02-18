@@ -1,5 +1,5 @@
 #include <ESP8266WiFi.h>
-#include <esp8266httpclient.h>
+#include <ezButton.h>
 #include "connector.h"
  
 const char* ssid = wifiName;
@@ -7,17 +7,26 @@ const char* password = wifiPassword;
  
 #define ledPin LED_BUILTIN
 #define D1 5
+#define D2 4
+
+
+//Btn
+//#define D5 14
+ezButton button(14);
 
 WiFiServer server(80);
 
 void setup() {
+   
   Serial.begin(115200);
   delay(10);
  
   pinMode(ledPin, OUTPUT);
   pinMode(D1,OUTPUT);
-  digitalWrite(D1, LOW);
+  pinMode(D2,OUTPUT);
+ // pinMode(D5,INPUT);
   digitalWrite(ledPin, LOW);
+  doorLock();
  
   // Connect to WiFi network
   Serial.println();
@@ -46,9 +55,19 @@ void setup() {
  
 }
 
+void doorLock(){
+   digitalWrite(D1, HIGH);
+   digitalWrite(D2, HIGH);
+}
 
+
+void doorUnlock(){
+  digitalWrite(D1, LOW);
+  digitalWrite(D2, LOW);
+}
  
 void loop() {
+  // button.loop();
   // Check if a client has connected
   WiFiClient client = server.available();
   if (!client) {
@@ -65,41 +84,25 @@ void loop() {
   String request = client.readStringUntil('\r');
   Serial.println(request);
   client.flush();
- 
- 
-  int value = LOW;
-  if (request.indexOf("/LED=ON") != -1)  {
-    
-    digitalWrite(D1, HIGH);
-    digitalWrite(ledPin, HIGH);
-    value = HIGH;
+
+
+ // Client Unlock door
+  if (request.indexOf("/Unlock") != -1)  {
+    Serial.println("UNLOCK");
+    doorUnlock();
+    delay(10000);
+    doorLock();   
+
   }
-  if (request.indexOf("/LED=OFF") != -1)  {
-     digitalWrite(D1, LOW);
-    digitalWrite(ledPin, LOW);
-    value = LOW;
-  }
- 
-// Set ledPin according to the request
-//digitalWrite(ledPin, value);
- 
+
+
   // Return the response
   client.println("HTTP/1.1 200 OK");
   client.println("Content-Type: text/html");
   client.println("");
   client.println("<!DOCTYPE HTML>");
   client.println("<html>");
- 
-  client.print("Led pin is now: ");
- 
-  if(value == HIGH) {
-    client.print("On");
-  } else {
-    client.print("Off");
-  }
-  client.println("<br><br>");
-  client.println("<a href=\"/LED=ON\"\"><button>Turn On </button></a>");
-  client.println("<a href=\"/LED=OFF\"\"><button>Turn Off </button></a><br />");  
+  client.println("<a href=\"/Unlock\"\"><button>Unlock Door</button></a>");
   client.println("</html>");
  
   delay(1);
