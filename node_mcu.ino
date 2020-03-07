@@ -1,111 +1,119 @@
 #include <ESP8266WiFi.h>
-#include <ezButton.h>
 #include "connector.h"
- 
-const char* ssid = wifiName;
-const char* password = wifiPassword;
- 
-#define ledPin LED_BUILTIN
+#include <PubSubClient.h>
+
+
+const char * topic = "door"; 
+#define mqtt_server "m15.cloudmqtt.com" 
+#define mqtt_port 14918 
+
+
+#define LED_PIN LED_BUILTIN
 #define D1 5
 #define D2 4
+#define D5 14
 
 
-//Btn
-//#define D5 14
-ezButton button(14);
+char *led_status = "OFF";
+char *doorStatus="";
 
-WiFiServer server(80);
+WiFiClient espClient;
+PubSubClient client(espClient);
 
 void setup() {
-   
-  Serial.begin(115200);
-  delay(10);
- 
-  pinMode(ledPin, OUTPUT);
-  pinMode(D1,OUTPUT);
-  pinMode(D2,OUTPUT);
- // pinMode(D5,INPUT);
-  digitalWrite(ledPin, LOW);
-  doorLock();
- 
-  // Connect to WiFi network
-  Serial.println();
-  Serial.println();
-  Serial.print("Connecting to ");
-  Serial.println(ssid);
- 
-  WiFi.begin(ssid, password);
- 
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println("");
-  Serial.println("WiFi connected");
- 
-  // Start the server
-  server.begin();
-  Serial.println("Server started");
- 
-  // Print the IP address
-  Serial.print("Use this URL to connect: ");
-  Serial.print("http://");
-  Serial.print(WiFi.localIP());
-  Serial.println("/");
- 
-}
+    pinMode(D1,OUTPUT);
+    pinMode(D2,OUTPUT);
+    pinMode(D5,OUTPUT);
+    pinMode(LED_PIN, OUTPUT);
+    Serial.begin(115200);
+    delay(10);
+    Serial.println();
+    Serial.print("Connecting to ");
+    Serial.println(ssid);
+    WiFi.begin(ssid, password);
+    
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        Serial.print(".");
+        }   
+    Serial.println("");
+    Serial.println("WiFi connected");
+    Serial.println("IP address: ");
+    Serial.println(WiFi.localIP());
 
+   
+    client.setServer(mqtt_server, mqtt_port); 
+    client.setCallback(callback);
+    doorLock();
+}
 void doorLock(){
+   doorStatus="Lock";
    digitalWrite(D1, HIGH);
    digitalWrite(D2, HIGH);
 }
 
+void soundOn(){
+   for (int i = 0; i <= 5; i++) {
+   digitalWrite(D5,HIGH);
+   delay(500);                  
+  digitalWrite(D5, LOW);
+  delay(500);
+   }
+}
 
 void doorUnlock(){
+  doorStatus="Unlock";
   digitalWrite(D1, LOW);
   digitalWrite(D2, LOW);
 }
  
+   
+
 void loop() {
-  // button.loop();
-  // Check if a client has connected
-  WiFiClient client = server.available();
-  if (!client) {
-    return;
-  }
- 
-  // Wait until the client sends some data
-  Serial.println("new client");
-  while(!client.available()){
-    delay(1);
-  }
- 
+  if (!client.connected()) {
+    Serial.print("MQTT connecting...");
+    if (client.connect("ESP8266Client", mqtt_user, mqtt_password)) {
+    client.subscribe(topic);
+    Serial.println("connected");
+    }
   
-  String request = client.readStringUntil('\r');
-  Serial.println(request);
-  client.flush();
+  else {
+    Serial.print("failed, rc=");
+    Serial.print(client.state());
+    Serial.println(" try again in 5 seconds");
+    delay(5000); 
+    return;
+    }
+  }
+  client.loop();
+}
 
+void callback(char* topic, byte* payload, unsigned int length) {
+  Serial.print("Message from ");
+  Serial.println(topic);
+  
+  String msg = "";
+  int i=0;
+  
+  while (i < length) {
+    msg += (char)payload[i++];
+    }
+    
+  Serial.print("receive ");
+  Serial.println(msg);
 
- // Client Unlock door
-  if (request.indexOf("/Unlock") != -1)  {
-    Serial.println("UNLOCK");
-    doorUnlock();
-    delay(10000);
-    doorLock();   
-
+  if (msg == "unlock") { 
+  doorUnlock();
+  } 
+  else if (msg == "lock") {
+  doorLock();
+  }
+  else if (msg=="sound"){
+    soundOn();
+  }
+  else if(msg=="status"){
+  client.publish("doorStatus", doorStatus);
   }
 
-
-  // Return the response
-  client.println("HTTP/1.1 200 OK");
-  client.println("Content-Type: text/html");
-  client.println("");
-  client.println("<!DOCTYPE HTML>");
-  client.println("<html>");
-  client.println("<a href=\"/Unlock\"\"><button>Unlock Door</button></a>");
-  client.println("</html>");
- 
-  delay(1);
-  Serial.println("Client disonnected");
-  Serial.println("");
+  
 }
