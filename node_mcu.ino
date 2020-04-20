@@ -2,10 +2,11 @@
 #include <PubSubClient.h>
 #include <ESP8266HTTPClient.h>
 #include <ArduinoJson.h>
-#include <WiFiClientSecure.h> 
+#include <WiFiClientSecure.h>
 #include <WiFiClientSecureBearSSL.h>
 #include "NTPClient.h"
 #include "WiFiUdp.h"
+#include "connector.h"
 
 const long utcOffsetInSeconds = 25200;
 
@@ -18,42 +19,40 @@ NTPClient timeClient(ntpUDP, "pool.ntp.org", utcOffsetInSeconds);
 #define D5 14
 #define D6 12
 
-char *doorStatus="";
-
+char *doorStatus = "";
 
 WiFiClient espClient;
 PubSubClient client(espClient);
-
 
 long lastMsg = 0;
 char msg[50];
 int value = 0;
 
-
-void logging(String function,String message){
+void logging(String function, String message)
+{
   StaticJsonBuffer<300> JSONbuffer;
-  JsonObject& JSONencoder = JSONbuffer.createObject();
+  JsonObject &JSONencoder = JSONbuffer.createObject();
   timeClient.update();
   /* Creating json logging */
   JSONencoder["from"] = "mqtt";
   JSONencoder["function"] = function;
   JSONencoder["message"] = message;
-  JSONencoder["timestamp"]=timeClient.getEpochTime();
+  JSONencoder["timestamp"] = timeClient.getEpochTime();
   char JSONmessageBuffer[300];
   JSONencoder.prettyPrintTo(JSONmessageBuffer, sizeof(JSONmessageBuffer));
-  
+
   HTTPClient http;
-  http.begin(log_url,sha_1);
+  http.begin(log_url, sha_1);
   http.addHeader("Content-Type", "application/json");
- 
+
   int httpCode = http.POST(JSONmessageBuffer);
   String payload = http.getString();
   Serial.println(httpCode);
   http.end();
 }
 
-
-void setup_wifi() {
+void setup_wifi()
+{
 
   delay(10);
   Serial.println();
@@ -62,7 +61,8 @@ void setup_wifi() {
 
   WiFi.begin(ssid, password);
 
-  while (WiFi.status() != WL_CONNECTED) {
+  while (WiFi.status() != WL_CONNECTED)
+  {
     delay(500);
     Serial.print(".");
   }
@@ -75,47 +75,56 @@ void setup_wifi() {
   Serial.println(WiFi.localIP());
 }
 
-void callback(char* topic, byte* payload, unsigned int length) {
+void callback(char *topic, byte *payload, unsigned int length)
+{
   Serial.print("Message arrived [");
   Serial.print(topic);
   Serial.print("] ");
   String msg = "";
-  int i=0;
-  
-  while (i < length) {
-    msg += (char)payload[i++];
-    }
-    
+  int i = 0;
 
- Serial.print("receive ");
+  while (i < length)
+  {
+    msg += (char)payload[i++];
+  }
+
+  Serial.print("receive ");
   Serial.println(msg);
 
-  if (msg == "unlock") { 
+  if (msg == "unlock")
+  {
     doorUnlock();
-    } 
-  else if (msg == "lock") {
+  }
+  else if (msg == "lock")
+  {
     doorLock();
-    }
-  else if (msg=="sound"){
+  }
+  else if (msg == "sound")
+  {
     soundOn();
-    }
-  else if(msg=="status"){
+  }
+  else if (msg == "status")
+  {
     client.publish("doorStatus", doorStatus);
-    }
-
+  }
 }
 
-void reconnect() {
-  while (!client.connected()) {
+void reconnect()
+{
+  while (!client.connected())
+  {
     Serial.print("Attempting MQTT connection...");
-    
-    if (client.connect("ESP8266Client", mqtt_username, mqtt_password)) {
+
+    if (client.connect("ESP8266Client", mqtt_username, mqtt_password))
+    {
       Serial.println("connected");
-     
+
       client.publish("mqtt", "Connected");
 
       client.subscribe("door/1");
-    } else {
+    }
+    else
+    {
       Serial.print("failed, rc=");
       Serial.print(client.state());
       Serial.println(" try again in 5 seconds");
@@ -124,71 +133,68 @@ void reconnect() {
     }
   }
 }
-void doorLock(){
-   digitalWrite(D1, HIGH);
-   digitalWrite(D2, HIGH);
+void doorLock()
+{
+  digitalWrite(D1, HIGH);
+  digitalWrite(D2, HIGH);
 
-   doorStatus="Lock";
-   logging("doorStatus",doorStatus);
-  client.publish("doorStatus",doorStatus);
+  doorStatus = "Lock";
+  logging("doorStatus", doorStatus);
+  client.publish("doorStatus", doorStatus);
 }
 
-
-
-void soundOn(){
-    logging("doorStatus","sound");
-   for (int i = 0; i < 5; i++) {
-     digitalWrite(D5,HIGH);
-     delay(500);                  
-     digitalWrite(D5, LOW);
-     delay(500);
-     }
-     
+void soundOn()
+{
+  logging("doorStatus", "sound");
+  for (int i = 0; i < 5; i++)
+  {
+    digitalWrite(D5, HIGH);
+    delay(500);
+    digitalWrite(D5, LOW);
+    delay(500);
+  }
 }
 
-void doorUnlock(){
+void doorUnlock()
+{
   digitalWrite(D1, LOW);
   digitalWrite(D2, LOW);
-  doorStatus="Unlock";
-  logging("doorStatus",doorStatus);
-  client.publish("doorStatus",doorStatus);
+  doorStatus = "Unlock";
+  logging("doorStatus", doorStatus);
+  client.publish("doorStatus", doorStatus);
   delay(3000);
   doorLock();
-
 }
 
-void setup() {
+void setup()
+{
   timeClient.begin();
-  pinMode(D1,OUTPUT);
-    pinMode(D2,OUTPUT);
-    pinMode(D5,OUTPUT);
-    pinMode(D6,INPUT);
-    pinMode(LED_PIN, OUTPUT);
-    Serial.begin(115200);
+  pinMode(D1, OUTPUT);
+  pinMode(D2, OUTPUT);
+  pinMode(D5, OUTPUT);
+  pinMode(D6, INPUT);
+  pinMode(LED_PIN, OUTPUT);
+  Serial.begin(115200);
   Serial.begin(115200);
   setup_wifi();
   client.setServer(mqtt_server, 14918);
   client.setCallback(callback);
-   doorLock();
+  doorLock();
 }
 
+void loop()
+{
 
-
-void loop() {
-
-  if (!client.connected()) {
+  if (!client.connected())
+  {
     reconnect();
   }
 
-   if (digitalRead(D6)==LOW){
+  if (digitalRead(D6) == LOW)
+  {
     Serial.println("btn Click");
     doorUnlock();
     delay(300);
   }
   client.loop();
-
- 
-  }
-
-
-  
+}
