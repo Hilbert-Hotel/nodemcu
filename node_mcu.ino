@@ -4,7 +4,7 @@
 #include <ArduinoJson.h>
 #include <WiFiClientSecure.h>
 #include <WiFiClientSecureBearSSL.h>
-#include "NTPClient.h"
+#include <NTPClient.h>
 #include "WiFiUdp.h"
 #include "connector.h"
 
@@ -37,17 +37,20 @@ void logging(String function, String message)
   JSONencoder["from"] = "mqtt";
   JSONencoder["function"] = function;
   JSONencoder["message"] = message;
+  String timec = timeClient.getFormattedDate();
+  JSONencoder["time"] = timec;
   JSONencoder["timestamp"] = timeClient.getEpochTime();
   char JSONmessageBuffer[300];
   JSONencoder.prettyPrintTo(JSONmessageBuffer, sizeof(JSONmessageBuffer));
 
+  Serial.print(JSONmessageBuffer);
   HTTPClient http;
   http.begin(log_url, sha_1);
   http.addHeader("Content-Type", "application/json");
 
   int httpCode = http.POST(JSONmessageBuffer);
-  String payload = http.getString();
   Serial.println(httpCode);
+  String payload = http.getString();
   http.end();
 }
 
@@ -135,6 +138,7 @@ void reconnect()
 }
 void doorLock()
 {
+  Serial.println("Lock");
   digitalWrite(D1, HIGH);
   digitalWrite(D2, HIGH);
 
@@ -145,6 +149,7 @@ void doorLock()
 
 void soundOn()
 {
+  Serial.println("SoundON");
   logging("doorStatus", "sound");
   for (int i = 0; i < 5; i++)
   {
@@ -157,13 +162,13 @@ void soundOn()
 
 void doorUnlock()
 {
+  Serial.println("UNLOCK");
   digitalWrite(D1, LOW);
   digitalWrite(D2, LOW);
   doorStatus = "Unlock";
   logging("doorStatus", doorStatus);
   client.publish("doorStatus", doorStatus);
-  delay(3000);
-  doorLock();
+  checkDoor();
 }
 
 void setup()
@@ -182,6 +187,20 @@ void setup()
   doorLock();
 }
 
+void checkDoor(){
+  delay(5000);
+  int sensorValue = analogRead(A0);
+  Serial.println("CheckDoor");
+  Serial.println(sensorValue);
+  //If the door is close
+  if (sensorValue>600){
+    doorLock();
+    return;
+  }
+  soundOn();
+  checkDoor();
+}
+
 void loop()
 {
 
@@ -196,5 +215,7 @@ void loop()
     doorUnlock();
     delay(300);
   }
+
+ 
   client.loop();
 }
